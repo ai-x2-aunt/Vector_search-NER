@@ -15,6 +15,8 @@ from langchain.docstore.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from chromadb.config import Settings
 
+from sentence_transformers import SentenceTransformer
+
 import shutil
 # main() 시작 부분에 추가
 persist_dir = "./chroma_data"  # 추가
@@ -26,9 +28,23 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-# 1) 임베딩 모델
-EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-embedding_model = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
+###########################################
+# 1) 임베딩 및 벡터스토어 로드
+###########################################
+class SentenceTransformerEmbeddings:
+    def __init__(self, model_name: str):
+        self.model = SentenceTransformer(model_name)
+        
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        embeddings = self.model.encode(texts)
+        return embeddings.tolist()
+        
+    def embed_query(self, text: str) -> List[float]:
+        embedding = self.model.encode(text)
+        return embedding.tolist()
+
+# KURE-v1 모델 사용
+embedding_model = SentenceTransformerEmbeddings(model_name="nlpai-lab/KURE-v1")
 
 # 2) Chunking 설정
 text_splitter = RecursiveCharacterTextSplitter(

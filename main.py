@@ -14,6 +14,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 
 from dotenv import load_dotenv
+from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 
@@ -33,8 +34,20 @@ app.add_middleware(
 ###########################################
 # 1) 임베딩 및 벡터스토어 로드
 ###########################################
-EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-embedding_model = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
+class SentenceTransformerEmbeddings:
+    def __init__(self, model_name: str):
+        self.model = SentenceTransformer(model_name)
+        
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        embeddings = self.model.encode(texts)
+        return embeddings.tolist()
+        
+    def embed_query(self, text: str) -> List[float]:
+        embedding = self.model.encode(text)
+        return embedding.tolist()
+
+# KURE-v1 모델 사용
+embedding_model = SentenceTransformerEmbeddings(model_name="nlpai-lab/KURE-v1")
 
 def load_vectorstore(persist_dir: str = "./chroma_data") -> Chroma:
     logger.info(f"Loading vector store from {persist_dir}")
