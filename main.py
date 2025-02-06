@@ -233,21 +233,6 @@ def compute_ner_similarity(user_ner: dict, doc_ner: dict) -> float:
                 score += 1.0
     return score
 
-def verify_document_metadata(doc: Document, idx: int):
-    md = doc.metadata
-    logger.info(f"[Metadata Verification] Doc {idx+1} metadata: {md}")
-    llm_ner_str = md.get("LLM_NER", "{}")
-    try:
-        llm_ner = json.loads(llm_ner_str)
-        required_keys = ["직무", "근무 지역", "연령대"]
-        missing_keys = [key for key in required_keys if key not in llm_ner]
-        if missing_keys:
-            logger.warning(f"[Metadata Verification] Doc {idx+1} missing keys in LLM_NER: {missing_keys}")
-        else:
-            logger.info(f"[Metadata Verification] Doc {idx+1} LLM_NER structure is valid.")
-    except Exception as ex:
-        logger.error(f"[Metadata Verification] Doc {idx+1} LLM_NER 파싱 실패: {ex}")
-
 def build_detailed_snippet(doc: Document) -> str:
     md = doc.metadata
     title = md.get("채용제목", "정보없음")
@@ -287,16 +272,15 @@ def llm_rerank(docs: List[Document], user_ner: dict) -> List[Document]:
 
     doc_snippets = []
     for i, doc in enumerate(docs):
-        verify_document_metadata(doc, i)
         snippet = build_detailed_snippet(doc)
         doc_snippets.append(f"Doc{i+1}:\n{snippet}\n")
 
     prompt_text = (
         f"사용자 조건: {condition_str}\n\n"
-        "아래 각 문서가 사용자 조건에 얼마나 부합하는지 0에서 5점으로 평가해줘. "
+        "아래 각 문서가 사용자 조건에 얼마나 부합하는지 0~5점으로 평가해줘. "
         "점수가 높을수록 조건에 더 부합함.\n\n"
         + "\n".join(doc_snippets) +
-        "\n\n답변은 반드시 JSON 형식으로만, 예: {\"scores\": [5, 3, 0, ...]}."
+        "\n\n답변은 반드시 JSON 형식으로만, 예: {\"scores\": [5, 3, 2, 1, ...]}."
     )
     logger.info(f"[llm_rerank] prompt:\n{prompt_text}")
 
@@ -455,6 +439,16 @@ def chat_endpoint(req: ChatRequest):
             user_ner = {}
 
         logger.info(f"[chat_endpoint] user_ner={user_ner}")
+
+        # 1-1) NER 데이터가 없거나 일부 항목이 누락되었으면 user_profile 값으로 대체
+        if not user_ner.get("직무") and req.user_profile.jobType:
+            user_ner["직무"] = req.user_profile.jobType
+        if not user_ner.get("지역") and req.user_profile.location:
+            user_ner["지역"] = req.user_profile.location
+        if not user_ner.get("연령대") and req.user_profile.age:
+            user_ner["연령대"] = req.user_profile.age
+
+        logger.info(f"[chat_endpoint] 업데이트된 user_ner: {user_ner}")
 
         # 2) 다단계 검색
         doc_list = multi_stage_search(user_ner)
